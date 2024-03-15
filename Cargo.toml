@@ -9,6 +9,11 @@ opt-level = "z"
 strip = "symbols"
 codegen-units = 1
 
+[profile.dev]
+lto = true
+opt-level = 3
+codegen-units = 1
+
 [dependencies]
 uuid = {version = "1.7.0", features = ["v4"]}
 axum = {version = "0.7.4", features = ["macros"]}
