@@ -64,7 +64,11 @@ pub async fn submit(request: Request) -> (StatusCode, Json<Value>) {
 
 #[tokio::main]
 async fn main() {
+    if std::path::Path::new(".env").exists() {
+        dotenv::dotenv().ok();
+    }
+    let listener_addr = std::env::var("LISTENER_ADDR").unwrap_or("0.0.0.0:3003".to_string());
     let qpp_router = Router::new().route("/submit", routing::post(submit));
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3003").await.unwrap();
+    let listener = tokio::net::TcpListener::bind(listener_addr).await.unwrap();
     axum::serve(listener, qpp_router).await.unwrap();
 }
