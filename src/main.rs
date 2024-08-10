@@ -3,38 +3,43 @@ use axum::{
     http::{header, StatusCode},
     routing, Form, Json, RequestExt, Router,
 };
-use serde::Deserialize;
+use emulate::EmulateMessage;
 use serde_json::{json, Value};
+pub mod emulate;
 
-#[derive(Deserialize, Debug)]
-pub struct EmulateMessage {
-    qasm: String,
-    shots: usize,
-}
-
-pub async fn consume_task(Form(message): Form<EmulateMessage>) -> (StatusCode, Json<Value>) {
+pub async fn consume_task(
+    Form(message): Form<emulate::EmulateMessage>,
+) -> (StatusCode, Json<Value>) {
     let qasm = message.qasm;
     let shots = if message.shots == 0 {
-        None
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"Error": "shots must be greater than 0"})),
+        );
     } else {
         Some(message.shots)
     };
 
-    match qasmsim::run(&qasm, shots) {
-        Ok(result) => {
-            let options = qasmsim::options::Options {
-                shots,
-                format: qasmsim::options::Format::Json,
-                ..Default::default()
-            };
+    let mode = if message.mode.is_none() {
+        "aggregation".to_string()
+    } else {
+        message.mode.unwrap().to_string()
+    };
 
-            (
-                StatusCode::OK,
-                Json(
-                    serde_json::from_str::<Value>(&qasmsim::print_result(&result, &options))
-                        .unwrap(),
-                ),
-            )
+    println!("mode: {}", mode);
+
+    // Currently, we don't need another thread to run the simulation
+    match qasmsim::run_mode(&qasm, shots, "sequence".to_string()) {
+        Ok(result) => {
+            match emulate::post_process_msg(result.sequences().clone().unwrap(), mode.clone()) {
+                Ok(json) => return (StatusCode::OK, json),
+                Err(err) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"Error": format!("{}", err)})),
+                    )
+                }
+            }
         }
         Err(err) => (
             StatusCode::BAD_REQUEST,
@@ -48,6 +53,10 @@ pub async fn submit(request: Request) -> (StatusCode, Json<Value>) {
         Some(content_type) => match content_type.to_str().unwrap() {
             "application/x-www-form-urlencoded" => {
                 let Form(message) = request.extract().await.unwrap();
+                consume_task(Form(message)).await
+            }
+            "application/json" => {
+                let Json::<EmulateMessage>(message) = request.extract().await.unwrap();
                 consume_task(Form(message)).await
             }
             _ => (
