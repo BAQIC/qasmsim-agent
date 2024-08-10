@@ -93,12 +93,16 @@ pub fn post_process_msg_minmax(seq: Vec<String>, is_max: bool) -> Json<Value> {
     if is_max {
         let max = mem.iter().max_by_key(|&(_, count)| count).unwrap();
         Json(json!({
-            "Memory": max,
+            "Memory": {
+                max.0: max.1,
+            },
         }))
     } else {
         let min = mem.iter().min_by_key(|&(_, count)| count).unwrap();
         Json(json!({
-            "Memory": min,
+            "Memory": {
+                min.0: min.1,
+            },
         }))
     }
 }

@@ -26,8 +26,6 @@ pub async fn consume_task(
         message.mode.unwrap().to_string()
     };
 
-    println!("mode: {}", mode);
-
     // Currently, we don't need another thread to run the simulation
     match qasmsim::run_mode(&qasm, shots, "sequence".to_string()) {
         Ok(result) => {
