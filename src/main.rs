@@ -5,7 +5,56 @@ use axum::{
 };
 use emulate::EmulateMessage;
 use serde_json::{json, Value};
+use tokio::sync::oneshot;
 pub mod emulate;
+
+pub async fn quantum_thread(
+    qasm: String,
+    shots: Option<usize>,
+    tx: oneshot::Sender<Result<qasmsim::Execution, String>>,
+) {
+    match qasmsim::run_mode(&qasm, shots, "sequence".to_string()) {
+        Ok(result) => {
+            // send the result to the classical_thread
+            tx.send(Ok(result)).unwrap()
+        }
+        Err(err) => {
+            // if there are some errors, send the error message to the classical_thread
+            tx.send(Err(err.to_string())).unwrap()
+        }
+    }
+}
+
+pub async fn classical_thread(
+    mode: String,
+    rx: oneshot::Receiver<Result<qasmsim::Execution, String>>,
+) -> (StatusCode, Json<Value>) {
+    // use rx to receive the result from the quantum_thread
+    match rx.await {
+        Ok(Ok(result)) => {
+            // post process message
+            match emulate::post_process_msg(result.sequences().clone().unwrap(), mode.clone()) {
+                Ok(json) => return (StatusCode::OK, json),
+                Err(err) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"Error": format!("{}", err)})),
+                    )
+                }
+            }
+        }
+        Ok(Err(err)) => (
+            // quantum thread error
+            StatusCode::BAD_REQUEST,
+            Json(json!({"Error": format!("{}", err)})),
+        ),
+        Err(_) => (
+            // receiver error
+            StatusCode::BAD_REQUEST,
+            Json(json!({"Error": "Internal server error"})),
+        ),
+    }
+}
 
 pub async fn consume_task(
     Form(message): Form<emulate::EmulateMessage>,
@@ -26,24 +75,9 @@ pub async fn consume_task(
         message.mode.unwrap().to_string()
     };
 
-    // Currently, we don't need another thread to run the simulation
-    match qasmsim::run_mode(&qasm, shots, "sequence".to_string()) {
-        Ok(result) => {
-            match emulate::post_process_msg(result.sequences().clone().unwrap(), mode.clone()) {
-                Ok(json) => return (StatusCode::OK, json),
-                Err(err) => {
-                    return (
-                        StatusCode::BAD_REQUEST,
-                        Json(json!({"Error": format!("{}", err)})),
-                    )
-                }
-            }
-        }
-        Err(err) => (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"Error": format!("{}", err)})),
-        ),
-    }
+    let (tx, rx) = oneshot::channel();
+    tokio::spawn(quantum_thread(qasm, shots, tx));
+    tokio::spawn(classical_thread(mode, rx)).await.unwrap()
 }
 
 pub async fn submit(request: Request) -> (StatusCode, Json<Value>) {
