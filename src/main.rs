@@ -3,37 +3,52 @@ use axum::{
     http::{header, StatusCode},
     routing, Form, Json, RequestExt, Router,
 };
-use emulate::EmulateMessage;
+use emulate::{pre_process_msg, EmulateMessage, EmulateMode};
 use serde_json::{json, Value};
 use tokio::sync::oneshot;
 pub mod emulate;
 
 pub async fn quantum_thread(
-    qasm: String,
-    shots: Option<usize>,
-    tx: oneshot::Sender<Result<qasmsim::Execution, String>>,
+    msg_rx: oneshot::Receiver<EmulateMessage>,
+    res_tx: oneshot::Sender<Result<qasmsim::Execution, String>>,
 ) {
-    match qasmsim::run_mode(&qasm, shots, "sequence".to_string()) {
+    let msg = msg_rx.await.unwrap();
+    let shots = if msg.shots == 0 {
+        res_tx
+            .send(Err("shots must be greater than 0".to_string()))
+            .unwrap();
+        return;
+    } else {
+        Some(msg.shots)
+    };
+
+    match qasmsim::run_mode(&msg.qasm, shots, "sequence".to_string()) {
         Ok(result) => {
             // send the result to the classical_thread
-            tx.send(Ok(result)).unwrap()
+            res_tx.send(Ok(result)).unwrap()
         }
         Err(err) => {
             // if there are some errors, send the error message to the classical_thread
-            tx.send(Err(err.to_string())).unwrap()
+            res_tx.send(Err(err.to_string())).unwrap()
         }
     }
 }
 
 pub async fn classical_thread(
-    mode: String,
-    rx: oneshot::Receiver<Result<qasmsim::Execution, String>>,
+    msg: EmulateMessage,
+    msg_tx: oneshot::Sender<EmulateMessage>,
+    res_rx: oneshot::Receiver<Result<qasmsim::Execution, String>>,
 ) -> (StatusCode, Json<Value>) {
-    // use rx to receive the result from the quantum_thread
-    match rx.await {
+    let mode = msg.mode.clone().unwrap_or(EmulateMode::Aggregation);
+
+    // send the message to the quantum_thread
+    msg_tx.send(pre_process_msg(msg)).unwrap();
+
+    // use res_rx to receive the result from the quantum_thread
+    match res_rx.await {
         Ok(Ok(result)) => {
             // post process message
-            match emulate::post_process_msg(result.sequences().clone().unwrap(), mode.clone()) {
+            match emulate::post_process_msg(result.sequences().clone().unwrap(), mode.to_string()) {
                 Ok(json) => return (StatusCode::OK, json),
                 Err(err) => {
                     return (
@@ -59,25 +74,13 @@ pub async fn classical_thread(
 pub async fn consume_task(
     Form(message): Form<emulate::EmulateMessage>,
 ) -> (StatusCode, Json<Value>) {
-    let qasm = message.qasm;
-    let shots = if message.shots == 0 {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"Error": "shots must be greater than 0"})),
-        );
-    } else {
-        Some(message.shots)
-    };
+    let (msg_tx, msg_rx) = oneshot::channel();
+    let (res_tx, res_rx) = oneshot::channel();
 
-    let mode = if message.mode.is_none() {
-        "aggregation".to_string()
-    } else {
-        message.mode.unwrap().to_string()
-    };
-
-    let (tx, rx) = oneshot::channel();
-    tokio::spawn(quantum_thread(qasm, shots, tx));
-    tokio::spawn(classical_thread(mode, rx)).await.unwrap()
+    tokio::spawn(quantum_thread(msg_rx, res_tx));
+    tokio::spawn(classical_thread(message, msg_tx, res_rx))
+        .await
+        .unwrap()
 }
 
 pub async fn submit(request: Request) -> (StatusCode, Json<Value>) {

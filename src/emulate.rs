@@ -1,13 +1,17 @@
 use axum::Json;
-use serde::{de, Deserialize, Deserializer};
+use serde::Deserialize;
 use serde_json::{json, Value};
-use std::{collections::HashMap, fmt, str::FromStr};
+use std::{collections::HashMap, fmt};
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub enum EmulateMode {
+    #[serde(rename = "sequence")]
     Sequence,
+    #[serde(rename = "aggregation")]
     Aggregation,
+    #[serde(rename = "max")]
     Max,
+    #[serde(rename = "min")]
     Min,
 }
 
@@ -34,41 +38,12 @@ impl fmt::Display for EmulateMode {
     }
 }
 
-impl FromStr for EmulateMode {
-    type Err = ParseEmulateModeError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "sequence" => Ok(EmulateMode::Sequence),
-            "aggregation" => Ok(EmulateMode::Aggregation),
-            "max" => Ok(EmulateMode::Max),
-            "min" => Ok(EmulateMode::Min),
-            _ => Err(ParseEmulateModeError),
-        }
-    }
-}
-
 #[derive(Deserialize, Debug)]
 pub struct EmulateMessage {
     pub qasm: String,
     pub shots: usize,
-    #[serde(default, deserialize_with = "empty_string_as_none")]
     pub mode: Option<EmulateMode>,
-}
-
-/// The function that converts an empty string to `None` when deserializing the
-/// optional field.
-fn empty_string_as_none<'de, D, T>(de: D) -> Result<Option<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: FromStr,
-    T::Err: fmt::Display,
-{
-    let opt = Option::<String>::deserialize(de)?;
-    match opt.as_deref() {
-        None | Some("") => Ok(None),
-        Some(s) => FromStr::from_str(s).map_err(de::Error::custom).map(Some),
-    }
+    pub vars: Option<HashMap<String, f32>>,
 }
 
 pub fn post_process_msg_agg(seq: Vec<String>) -> Json<Value> {
@@ -117,4 +92,14 @@ pub fn post_process_msg(seq: Vec<String>, mode: String) -> Result<Json<Value>, S
         "min" => Ok(post_process_msg_minmax(seq, false)),
         _ => Err("Invalid mode".to_string()),
     }
+}
+
+pub fn pre_process_msg(mut msg: EmulateMessage) -> EmulateMessage {
+    if msg.vars.is_some() {
+        for (key, value) in msg.vars.as_ref().unwrap() {
+            msg.qasm = msg.qasm.replace(key, &value.to_string());
+        }
+    }
+
+    msg
 }
