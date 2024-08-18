@@ -46,7 +46,7 @@ pub struct EmulateMessage {
     pub qasm: String,
     pub shots: usize,
     pub mode: Option<EmulateMode>,
-    pub vars: Option<HashMap<String, f32>>,
+    pub vars: Option<String>,
 }
 
 pub fn post_process_msg_agg(seq: Vec<String>) -> Json<Value> {
@@ -121,9 +121,13 @@ pub fn post_process_msg(seq: Vec<String>, mode: String) -> Result<Json<Value>, S
 }
 
 pub fn pre_process_msg(mut msg: EmulateMessage) -> EmulateMessage {
+    let vars = serde_json::from_str::<HashMap<String, f32>>(
+        msg.vars.clone().unwrap_or("{}".to_string()).as_str(),
+    )
+    .unwrap();
     if msg.vars.is_some() {
-        for (key, value) in msg.vars.as_ref().unwrap() {
-            msg.qasm = msg.qasm.replace(key, &value.to_string());
+        for (key, value) in vars {
+            msg.qasm = msg.qasm.replace(&key, &value.to_string());
         }
     }
 
