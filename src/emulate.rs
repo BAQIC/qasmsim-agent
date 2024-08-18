@@ -57,7 +57,7 @@ pub fn post_process_msg_agg(seq: Vec<String>) -> Json<Value> {
     }
 
     Json(json!({
-        "Memory": mem,
+        "Result": mem,
     }))
 }
 
@@ -71,14 +71,14 @@ pub fn post_process_msg_minmax(seq: Vec<String>, is_max: bool) -> Json<Value> {
     if is_max {
         let max = mem.iter().max_by_key(|&(_, count)| count).unwrap();
         Json(json!({
-            "Memory": {
+            "Result": {
                 max.0: max.1,
             },
         }))
     } else {
         let min = mem.iter().min_by_key(|&(_, count)| count).unwrap();
         Json(json!({
-            "Memory": {
+            "Result": {
                 min.0: min.1,
             },
         }))
@@ -104,13 +104,13 @@ pub fn post_process_msg_expe(seq: Vec<String>) -> Json<Value> {
 
     exp = exp.into_iter().map(|x| x / len as f32).collect();
 
-    Json(json!({"Memory": exp}))
+    Json(json!({"Result": [exp]}))
 }
 
 pub fn post_process_msg(seq: Vec<String>, mode: String) -> Result<Json<Value>, String> {
     match mode.as_str() {
         "sequence" => Ok(Json(json!({
-            "Memory": seq,
+            "Result": [seq],
         }))),
         "aggregation" => Ok(post_process_msg_agg(seq)),
         "max" => Ok(post_process_msg_minmax(seq, true)),
