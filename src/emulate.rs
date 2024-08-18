@@ -13,6 +13,8 @@ pub enum EmulateMode {
     Max,
     #[serde(rename = "min")]
     Min,
+    #[serde(rename = "expectation")]
+    Expectation,
 }
 
 /// For the `EmulateMode` enum, we need to implement the `FromStr` trait to
@@ -34,6 +36,7 @@ impl fmt::Display for EmulateMode {
             EmulateMode::Aggregation => write!(f, "aggregation"),
             EmulateMode::Max => write!(f, "max"),
             EmulateMode::Min => write!(f, "min"),
+            EmulateMode::Expectation => write!(f, "expectation"),
         }
     }
 }
@@ -82,6 +85,28 @@ pub fn post_process_msg_minmax(seq: Vec<String>, is_max: bool) -> Json<Value> {
     }
 }
 
+pub fn post_process_msg_expe(seq: Vec<String>) -> Json<Value> {
+    let len = seq.len();
+    let mut exp: Vec<f32> = if len != 0 {
+        vec![0.0; seq[0].len()]
+    } else {
+        Vec::new()
+    };
+
+    for s in seq {
+        let char = s.chars();
+        for (i, c) in char.enumerate() {
+            if c == '1' {
+                exp[i] += 1.0;
+            }
+        }
+    }
+
+    exp = exp.into_iter().map(|x| x / len as f32).collect();
+
+    Json(json!({"Memory": exp}))
+}
+
 pub fn post_process_msg(seq: Vec<String>, mode: String) -> Result<Json<Value>, String> {
     match mode.as_str() {
         "sequence" => Ok(Json(json!({
@@ -90,6 +115,7 @@ pub fn post_process_msg(seq: Vec<String>, mode: String) -> Result<Json<Value>, S
         "aggregation" => Ok(post_process_msg_agg(seq)),
         "max" => Ok(post_process_msg_minmax(seq, true)),
         "min" => Ok(post_process_msg_minmax(seq, false)),
+        "expectation" => Ok(post_process_msg_expe(seq)),
         _ => Err("Invalid mode".to_string()),
     }
 }
