@@ -85,6 +85,7 @@ pub fn post_process_msg_minmax(seq: Vec<String>, is_max: bool) -> Json<Value> {
     }
 }
 
+// current for z expectation
 pub fn post_process_msg_expe(seq: Vec<String>) -> Json<Value> {
     let len = seq.len();
     let mut exp: Vec<f32> = if len != 0 {
@@ -97,6 +98,8 @@ pub fn post_process_msg_expe(seq: Vec<String>) -> Json<Value> {
         let char = s.chars();
         for (i, c) in char.enumerate() {
             if c == '1' {
+                exp[i] -= 1.0;
+            } else {
                 exp[i] += 1.0;
             }
         }
