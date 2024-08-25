@@ -45,7 +45,7 @@ impl fmt::Display for EmulateMode {
 }
 
 /// Only for deserialize the post message
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct EmulateMessage {
     pub qasm: String,
     pub shots: usize,
@@ -53,6 +53,7 @@ pub struct EmulateMessage {
     // only when the mode is vqe, this field is required
     pub iterations: Option<usize>,
     pub vars: Option<String>,
+    pub vars_range: Option<String>,
 }
 
 /// For simulator use
@@ -61,9 +62,6 @@ pub struct EmulateInfo {
     pub qasm: String,
     pub shots: Option<usize>,
     pub mode: Option<EmulateMode>,
-    pub iterations: Option<usize>,
-    pub vars: Option<HashMap<String, f32>>,
-    pub vars_range: Option<HashMap<String, (f32, f32)>>,
 }
 
 pub fn post_process_msg_agg(seq: Vec<String>) -> Json<Value> {
@@ -167,8 +165,34 @@ pub fn pre_process_msg(msg: EmulateMessage) -> EmulateInfo {
             Some(msg.shots)
         },
         mode: msg.mode,
-        iterations: msg.iterations,
-        vars: Some(vars),
-        vars_range: None,
+    }
+}
+
+pub fn pre_process_msg_vqe(
+    msg: EmulateMessage,
+    vars_range: HashMap<String, (f32, f32)>,
+    iteration: usize,
+    iterations: usize,
+) -> EmulateInfo {
+    let mut vars: HashMap<String, f32> = HashMap::new();
+
+    for (key, value) in vars_range {
+        vars.insert(
+            key,
+            value.0 + (value.1 - value.0) * iteration as f32 / (iterations - 1) as f32,
+        );
+    }
+
+    let mut qasm_ = msg.qasm.clone();
+    if !vars.is_empty() {
+        for (key, value) in vars.iter() {
+            qasm_ = qasm_.replace(key, &value.to_string());
+        }
+    }
+
+    EmulateInfo {
+        qasm: qasm_,
+        shots: None,
+        mode: msg.mode,
     }
 }

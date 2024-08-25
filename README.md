@@ -28,3 +28,16 @@ curl -X POST -H "Content-Type: application/json" -d '{
 
 {"Result":{"00000111":7}}
 ```
+
+## Example VQE
+  
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{
+  "task_id": "test",
+  "shots": 10,
+  "qasm": "OPENQASM 2.0;\ninclude \"qelib1.inc\";\nqreg q[8];creg c[8];\nx q[0];\ny q[1];\nh q[2];\nmeasure q[0] -> c[0];\nmeasure q[1] -> c[1];\nry(variable_01) q[3];\nmeasure q[2] -> c[2];",
+  "mode": "vqe",
+  "vars": "{\"variable_01\": [0.0, 20.0],\n\"variable_02\": [0.0, 30.0]}"
+}' http://127.0.0.1:3003/submit
+```
+
