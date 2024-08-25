@@ -15,6 +15,8 @@ pub enum EmulateMode {
     Min,
     #[serde(rename = "expectation")]
     Expectation,
+    #[serde(rename = "vqe")]
+    Vqe,
 }
 
 /// For the `EmulateMode` enum, we need to implement the `FromStr` trait to
@@ -37,16 +39,31 @@ impl fmt::Display for EmulateMode {
             EmulateMode::Max => write!(f, "max"),
             EmulateMode::Min => write!(f, "min"),
             EmulateMode::Expectation => write!(f, "expectation"),
+            EmulateMode::Vqe => write!(f, "vqe"),
         }
     }
 }
 
+/// Only for deserialize the post message
 #[derive(Deserialize, Debug)]
 pub struct EmulateMessage {
     pub qasm: String,
     pub shots: usize,
     pub mode: Option<EmulateMode>,
+    // only when the mode is vqe, this field is required
+    pub iterations: Option<usize>,
     pub vars: Option<String>,
+}
+
+/// For simulator use
+#[derive(Deserialize, Debug)]
+pub struct EmulateInfo {
+    pub qasm: String,
+    pub shots: Option<usize>,
+    pub mode: Option<EmulateMode>,
+    pub iterations: Option<usize>,
+    pub vars: Option<HashMap<String, f32>>,
+    pub vars_range: Option<HashMap<String, (f32, f32)>>,
 }
 
 pub fn post_process_msg_agg(seq: Vec<String>) -> Json<Value> {
@@ -110,6 +127,11 @@ pub fn post_process_msg_expe(seq: Vec<String>) -> Json<Value> {
     Json(json!({"Result": [exp]}))
 }
 
+pub fn post_process_msg_vqe(seq: Vec<f64>) -> Result<Json<Value>, String> {
+    println!("{:?}", seq);
+    Ok(Json(json!({})))
+}
+
 pub fn post_process_msg(seq: Vec<String>, mode: String) -> Result<Json<Value>, String> {
     match mode.as_str() {
         "sequence" => Ok(Json(json!({
@@ -123,16 +145,30 @@ pub fn post_process_msg(seq: Vec<String>, mode: String) -> Result<Json<Value>, S
     }
 }
 
-pub fn pre_process_msg(mut msg: EmulateMessage) -> EmulateMessage {
+pub fn pre_process_msg(msg: EmulateMessage) -> EmulateInfo {
     let vars = serde_json::from_str::<HashMap<String, f32>>(
         msg.vars.clone().unwrap_or("{}".to_string()).as_str(),
     )
     .unwrap();
+
+    let mut qasm_ = msg.qasm.clone();
+
     if msg.vars.is_some() {
-        for (key, value) in vars {
-            msg.qasm = msg.qasm.replace(&key, &value.to_string());
+        for (key, value) in vars.iter() {
+            qasm_ = qasm_.replace(key, &value.to_string());
         }
     }
 
-    msg
+    EmulateInfo {
+        qasm: qasm_,
+        shots: if msg.shots == 0 {
+            Some(1)
+        } else {
+            Some(msg.shots)
+        },
+        mode: msg.mode,
+        iterations: msg.iterations,
+        vars: Some(vars),
+        vars_range: None,
+    }
 }
