@@ -100,7 +100,7 @@ pub fn post_process_msg_minmax(seq: Vec<String>, is_max: bool) -> Json<Value> {
     }
 }
 
-// current for z expectation
+/// current for z expectation
 pub fn post_process_msg_expe(seq: Vec<String>) -> Json<Value> {
     let len = seq.len();
     let mut exp: Vec<f32> = if len != 0 {

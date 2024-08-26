@@ -10,6 +10,8 @@ use serde_json::{json, Value};
 use tokio::sync::oneshot;
 pub mod emulate;
 
+/// TODO: merge quantum_thread and quantum_thread_vqe
+/// quantum thread for aggregation, max, min, expectation, and sequence
 pub async fn quantum_thread(
     msg_rx: oneshot::Receiver<EmulateInfo>,
     res_tx: oneshot::Sender<Result<qasmsim::Execution, String>>,
@@ -27,6 +29,7 @@ pub async fn quantum_thread(
     }
 }
 
+/// quantum thread for VQE
 pub async fn quantum_thread_vqe(
     msg_rx: oneshot::Receiver<EmulateInfo>,
     res_tx: oneshot::Sender<Result<qasmsim::Execution, String>>,
@@ -44,6 +47,8 @@ pub async fn quantum_thread_vqe(
     }
 }
 
+/// TODO: merge classical_thread and classical_thread_vqe
+/// classical thread for aggregation, max, min, expectation, and sequence
 pub async fn classical_thread(
     msg: EmulateMessage,
     msg_tx: oneshot::Sender<EmulateInfo>,
@@ -81,6 +86,7 @@ pub async fn classical_thread(
     }
 }
 
+/// classical thread for VQE
 pub async fn classical_thread_vqe(
     msg: EmulateMessage,
     vars_range: HashMap<String, (f32, f32)>,
@@ -121,6 +127,9 @@ pub async fn classical_thread_vqe(
     }
 }
 
+/// consume_task is the main function to consume the task
+/// it will spawn the quantum_thread and classical_thread execept for VQE
+/// for VQE, it will spawn multiple classical_thread_vqe amd quantum_thread_vqe
 pub async fn consume_task(
     Form(mut message): Form<emulate::EmulateMessage>,
 ) -> (StatusCode, Json<Value>) {
@@ -191,6 +200,7 @@ pub async fn consume_task(
     }
 }
 
+/// endpoint to submit the task
 pub async fn submit(request: Request) -> (StatusCode, Json<Value>) {
     match request.headers().get(header::CONTENT_TYPE) {
         Some(content_type) => match content_type.to_str().unwrap() {
