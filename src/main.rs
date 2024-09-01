@@ -9,6 +9,7 @@ use emulate::{pre_process_msg, pre_process_msg_vqe, EmulateInfo, EmulateMessage,
 use serde_json::{json, Value};
 use tokio::sync::oneshot;
 pub mod emulate;
+pub mod optimizer;
 
 /// TODO: merge quantum_thread and quantum_thread_vqe
 /// quantum thread for aggregation, max, min, expectation, and sequence
