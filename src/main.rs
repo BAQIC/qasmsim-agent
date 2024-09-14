@@ -1,9 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
-    extract::Request,
+    extract::{Request, State},
     http::{header, StatusCode},
-    routing, Extension, Form, Json, RequestExt, Router,
+    routing, Form, Json, RequestExt, Router,
 };
 use emulate::{EmulateMessage, EmulateMode};
 use serde_json::{json, Value};
@@ -14,11 +14,11 @@ pub mod optimizer;
 pub mod thread;
 
 #[derive(Debug, Clone)]
-pub struct State {
+pub struct ServerState {
     pub results: measure::MeasureResult,
 }
 
-type SharedState = Arc<RwLock<State>>;
+type SharedState = Arc<RwLock<ServerState>>;
 
 /// consume_task is the main function to consume the task
 /// it will spawn the quantum_thread and classical_thread execept for VQE
@@ -39,7 +39,7 @@ pub async fn consume_task(
             let (res_tx, res_rx) = oneshot::channel();
 
             tokio::spawn(thread::quantum_thread(msg_rx, res_tx));
-            tokio::spawn(thread::classical_thread(message, msg_tx, res_rx))
+            tokio::spawn(thread::classical_thread(state, message, msg_tx, res_rx))
                 .await
                 .unwrap()
         }
@@ -96,7 +96,7 @@ pub async fn consume_task(
 
 /// endpoint to submit the task
 pub async fn submit(
-    Extension(state): Extension<SharedState>,
+    State(state): State<SharedState>,
     request: Request,
 ) -> (StatusCode, Json<Value>) {
     match request.headers().get(header::CONTENT_TYPE) {
@@ -127,7 +127,7 @@ async fn main() {
         dotenv::dotenv().ok();
     }
 
-    let state = Arc::new(RwLock::new(State {
+    let state = Arc::new(RwLock::new(ServerState {
         results: measure::MeasureResult::default(),
     }));
 

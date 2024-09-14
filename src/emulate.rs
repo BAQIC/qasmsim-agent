@@ -3,6 +3,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{collections::HashMap, fmt};
 
+use crate::SharedState;
+
 #[derive(Deserialize, Debug, Clone)]
 pub enum EmulateMode {
     #[serde(rename = "sequence")]
@@ -130,7 +132,16 @@ pub fn post_process_msg_vqe(seq: Vec<f64>) -> Result<Json<Value>, String> {
     Ok(Json(json!({})))
 }
 
-pub fn post_process_msg(seq: Vec<String>, mode: String) -> Result<Json<Value>, String> {
+pub async fn post_process_msg(
+    state: SharedState,
+    seq: Vec<String>,
+    mode: String,
+) -> Result<Json<Value>, String> {
+    let mut state_w = state.write().await;
+    for s in seq.iter() {
+        state_w.results.update_results(s);
+    }
+
     match mode.as_str() {
         "sequence" => Ok(Json(json!({
             "Result": [seq],

@@ -1,3 +1,5 @@
+use crate::SharedState;
+
 use super::emulate::{
     post_process_msg, post_process_msg_vqe, pre_process_msg, pre_process_msg_vqe, EmulateInfo,
     EmulateMessage,
@@ -47,6 +49,7 @@ pub async fn quantum_thread_vqe(
 /// TODO: merge classical_thread and classical_thread_vqe
 /// classical thread for aggregation, max, min, expectation, and sequence
 pub async fn classical_thread(
+    state: SharedState,
     msg: EmulateMessage,
     msg_tx: oneshot::Sender<EmulateInfo>,
     res_rx: oneshot::Receiver<Result<qasmsim::Execution, String>>,
@@ -60,7 +63,9 @@ pub async fn classical_thread(
     match res_rx.await {
         Ok(Ok(result)) => {
             // post process message
-            match post_process_msg(result.sequences().clone().unwrap(), mode.to_string()) {
+            match post_process_msg(state, result.sequences().clone().unwrap(), mode.to_string())
+                .await
+            {
                 Ok(json) => return (StatusCode::OK, json),
                 Err(err) => {
                     return (

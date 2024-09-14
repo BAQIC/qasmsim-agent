@@ -11,9 +11,9 @@ pub struct MeasureResult {
 impl Default for MeasureResult {
     fn default() -> Self {
         MeasureResult {
-            results: vec![vec![0; 0]; 0],
-            qbits: 0,
-            capacity: 0,
+            results: vec![vec![0; 20]; 20],
+            qbits: 20,
+            capacity: 20,
             current_pos: 0,
         }
     }
@@ -51,5 +51,20 @@ impl MeasureResult {
         self.qbits = qbits;
         self.current_pos = 0;
         self.results = vec![vec![0; qbits]; self.capacity];
+    }
+
+    pub fn update_results(&mut self, str: &String) {
+        let mut mz_res: Vec<u8> = vec![0; self.qbits];
+        for (i, c) in str.chars().rev().enumerate() {
+            if c == '1' {
+                mz_res[self.qbits - i - 1] = 1;
+            } else {
+                mz_res[self.qbits - i - 1] = 0;
+            }
+        }
+
+        self.results[self.current_pos] = mz_res;
+        self.current_pos += 1;
+        self.current_pos = self.current_pos % self.capacity;
     }
 }
