@@ -1,14 +1,24 @@
 use axum::Json;
-use serde::{de, Deserialize, Deserializer};
+use serde::Deserialize;
 use serde_json::{json, Value};
-use std::{collections::HashMap, fmt, str::FromStr};
+use std::{collections::HashMap, fmt};
 
-#[derive(Deserialize, Debug)]
+use crate::SharedState;
+
+#[derive(Deserialize, Debug, Clone)]
 pub enum EmulateMode {
+    #[serde(rename = "sequence")]
     Sequence,
+    #[serde(rename = "aggregation")]
     Aggregation,
+    #[serde(rename = "max")]
     Max,
+    #[serde(rename = "min")]
     Min,
+    #[serde(rename = "expectation")]
+    Expectation,
+    #[serde(rename = "vqe")]
+    Vqe,
 }
 
 /// For the `EmulateMode` enum, we need to implement the `FromStr` trait to
@@ -30,48 +40,33 @@ impl fmt::Display for EmulateMode {
             EmulateMode::Aggregation => write!(f, "aggregation"),
             EmulateMode::Max => write!(f, "max"),
             EmulateMode::Min => write!(f, "min"),
+            EmulateMode::Expectation => write!(f, "expectation"),
+            EmulateMode::Vqe => write!(f, "vqe"),
         }
     }
 }
 
-impl FromStr for EmulateMode {
-    type Err = ParseEmulateModeError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "sequence" => Ok(EmulateMode::Sequence),
-            "aggregation" => Ok(EmulateMode::Aggregation),
-            "max" => Ok(EmulateMode::Max),
-            "min" => Ok(EmulateMode::Min),
-            _ => Err(ParseEmulateModeError),
-        }
-    }
-}
-
-#[derive(Deserialize, Debug)]
+/// Only for deserialize the post message
+#[derive(Deserialize, Debug, Clone)]
 pub struct EmulateMessage {
     pub qasm: String,
     pub shots: usize,
-    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub mode: Option<EmulateMode>,
+    // only when the mode is vqe, this field is required
+    pub iterations: Option<usize>,
+    pub vars: Option<String>,
+    pub vars_range: Option<String>,
+}
+
+/// For simulator use
+#[derive(Deserialize, Debug)]
+pub struct EmulateInfo {
+    pub qasm: String,
+    pub shots: Option<usize>,
     pub mode: Option<EmulateMode>,
 }
 
-/// The function that converts an empty string to `None` when deserializing the
-/// optional field.
-fn empty_string_as_none<'de, D, T>(de: D) -> Result<Option<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: FromStr,
-    T::Err: fmt::Display,
-{
-    let opt = Option::<String>::deserialize(de)?;
-    match opt.as_deref() {
-        None | Some("") => Ok(None),
-        Some(s) => FromStr::from_str(s).map_err(de::Error::custom).map(Some),
-    }
-}
-
-pub fn post_process_msg_agg(seq: Vec<String>) -> Json<Value> {
+pub fn post_process_msg_agg(seq: Vec<String>, init_pos: usize) -> Json<Value> {
     let mut mem = HashMap::new();
     for s in seq {
         let count = mem.entry(s).or_insert(0);
@@ -79,11 +74,12 @@ pub fn post_process_msg_agg(seq: Vec<String>) -> Json<Value> {
     }
 
     Json(json!({
-        "Memory": mem,
+        "init_position": init_pos,
+        "Result": mem,
     }))
 }
 
-pub fn post_process_msg_minmax(seq: Vec<String>, is_max: bool) -> Json<Value> {
+pub fn post_process_msg_minmax(seq: Vec<String>, is_max: bool, init_pos: usize) -> Json<Value> {
     let mut mem = HashMap::new();
     for s in seq {
         let count = mem.entry(s).or_insert(0);
@@ -93,28 +89,127 @@ pub fn post_process_msg_minmax(seq: Vec<String>, is_max: bool) -> Json<Value> {
     if is_max {
         let max = mem.iter().max_by_key(|&(_, count)| count).unwrap();
         Json(json!({
-            "Memory": {
+            "init_position": init_pos,
+            "Result": {
                 max.0: max.1,
             },
         }))
     } else {
         let min = mem.iter().min_by_key(|&(_, count)| count).unwrap();
         Json(json!({
-            "Memory": {
+            "init_position": init_pos,
+            "Result": {
                 min.0: min.1,
             },
         }))
     }
 }
 
-pub fn post_process_msg(seq: Vec<String>, mode: String) -> Result<Json<Value>, String> {
+/// current for z expectation
+pub fn post_process_msg_expe(seq: Vec<String>, init_pos: usize) -> Json<Value> {
+    let len = seq.len();
+    let mut exp: Vec<f32> = if len != 0 {
+        vec![0.0; seq[0].len()]
+    } else {
+        Vec::new()
+    };
+
+    for s in seq {
+        let char = s.chars();
+        for (i, c) in char.enumerate() {
+            if c == '1' {
+                exp[i] -= 1.0;
+            } else {
+                exp[i] += 1.0;
+            }
+        }
+    }
+
+    exp = exp.into_iter().map(|x| x / len as f32).collect();
+
+    Json(json!({"init_position": init_pos, "Result": [exp]}))
+}
+
+pub fn post_process_msg_vqe(seq: Vec<f64>) -> Result<Json<Value>, String> {
+    println!("{:?}", seq);
+    Ok(Json(json!({})))
+}
+
+pub async fn post_process_msg(
+    state: SharedState,
+    seq: Vec<String>,
+    mode: String,
+) -> Result<Json<Value>, String> {
+    let mut state_w = state.write().await;
+    let init_pos = state_w.results.current_pos;
+    for s in seq.iter() {
+        state_w.results.update_results(s);
+    }
+    state_w.results.dump_file(&state_w.measure_path);
+
     match mode.as_str() {
         "sequence" => Ok(Json(json!({
-            "Memory": seq,
+            "init_position": init_pos,
+            "Result": [seq],
         }))),
-        "aggregation" => Ok(post_process_msg_agg(seq)),
-        "max" => Ok(post_process_msg_minmax(seq, true)),
-        "min" => Ok(post_process_msg_minmax(seq, false)),
+        "aggregation" => Ok(post_process_msg_agg(seq, init_pos)),
+        "max" => Ok(post_process_msg_minmax(seq, true, init_pos)),
+        "min" => Ok(post_process_msg_minmax(seq, false, init_pos)),
+        "expectation" => Ok(post_process_msg_expe(seq, init_pos)),
         _ => Err("Invalid mode".to_string()),
+    }
+}
+
+pub fn pre_process_msg(msg: EmulateMessage) -> EmulateInfo {
+    let vars = serde_json::from_str::<HashMap<String, f32>>(
+        msg.vars.clone().unwrap_or("{}".to_string()).as_str(),
+    )
+    .unwrap();
+
+    let mut qasm_ = msg.qasm.clone();
+
+    if msg.vars.is_some() {
+        for (key, value) in vars.iter() {
+            qasm_ = qasm_.replace(key, &value.to_string());
+        }
+    }
+
+    EmulateInfo {
+        qasm: qasm_,
+        shots: if msg.shots == 0 {
+            Some(1)
+        } else {
+            Some(msg.shots)
+        },
+        mode: msg.mode,
+    }
+}
+
+pub fn pre_process_msg_vqe(
+    msg: EmulateMessage,
+    vars_range: HashMap<String, (f32, f32)>,
+    iteration: usize,
+    iterations: usize,
+) -> EmulateInfo {
+    let mut vars: HashMap<String, f32> = HashMap::new();
+
+    for (key, value) in vars_range {
+        vars.insert(
+            key,
+            value.0 + (value.1 - value.0) * iteration as f32 / (iterations - 1) as f32,
+        );
+    }
+
+    let mut qasm_ = msg.qasm.clone();
+    if !vars.is_empty() {
+        for (key, value) in vars.iter() {
+            qasm_ = qasm_.replace(key, &value.to_string());
+        }
+    }
+
+    EmulateInfo {
+        qasm: qasm_,
+        shots: None,
+        mode: msg.mode,
     }
 }

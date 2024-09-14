@@ -9,10 +9,10 @@ opt-level = "z"
 strip = "symbols"
 codegen-units = 1
 
-[profile.dev]
-lto = true
-opt-level = 3
-codegen-units = 1
+# [profile.dev]
+# lto = true
+# opt-level = 3
+# codegen-units = 1
 
 [dependencies]
 uuid = {version = "1.7.0", features = ["v4"]}
@@ -23,3 +23,4 @@ serde_json = "1.0.111"
 num = "0.4.1"
 qasmsim = { git = "https://github.com/BAQIC/qasmsim.git" }
 dotenv = "0.15.0"
+cobyla = "0.6.0"
