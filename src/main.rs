@@ -1,11 +1,13 @@
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
-    extract::{Request, State},
+    extract::{Query, Request, State},
     http::{header, StatusCode},
     routing, Form, Json, RequestExt, Router,
 };
 use emulate::{EmulateMessage, EmulateMode};
+use measure::MeasureResult;
+use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::sync::{oneshot, RwLock};
 pub mod emulate;
@@ -15,10 +17,24 @@ pub mod thread;
 
 #[derive(Debug, Clone)]
 pub struct ServerState {
+    pub measure_path: String,
     pub results: measure::MeasureResult,
 }
 
 type SharedState = Arc<RwLock<ServerState>>;
+
+/// For classical storage initialize and update
+#[derive(Deserialize, Debug, Clone)]
+pub struct ClassicalInfo {
+    pub qbits: Option<usize>,
+    pub capacity: Option<usize>,
+}
+
+/// For classical storage query
+#[derive(Deserialize, Debug, Clone)]
+pub struct MeasurePos {
+    pub pos: usize,
+}
 
 /// consume_task is the main function to consume the task
 /// it will spawn the quantum_thread and classical_thread execept for VQE
@@ -121,19 +137,105 @@ pub async fn submit(
     }
 }
 
+pub async fn update_classical(
+    State(state): State<SharedState>,
+    request: Request,
+) -> (StatusCode, Json<Value>) {
+    match request.headers().get(header::CONTENT_TYPE) {
+        Some(content_type) => match content_type.to_str().unwrap() {
+            "application/x-www-form-urlencoded" => {
+                let Form(message): Form<ClassicalInfo> = request.extract().await.unwrap();
+                let mut state_w = state.write().await;
+
+                if message.qbits.is_some() {
+                    state_w.results.update_qbits(message.qbits.unwrap())
+                }
+
+                if message.capacity.is_some() {
+                    state_w.results.update_capaicity(message.capacity.unwrap())
+                }
+
+                state_w.results.dump_file(&state_w.measure_path);
+
+                (
+                    StatusCode::OK,
+                    Json(json!({"Result": format!("Update classical info with {:?}", message)})),
+                )
+            }
+            "application/json" => {
+                let Json::<ClassicalInfo>(message) = request.extract().await.unwrap();
+                let mut state_w = state.write().await;
+
+                if message.qbits.is_some() {
+                    state_w.results.update_qbits(message.qbits.unwrap())
+                }
+
+                if message.capacity.is_some() {
+                    state_w.results.update_capaicity(message.capacity.unwrap())
+                }
+
+                state_w.results.dump_file(&state_w.measure_path);
+
+                (
+                    StatusCode::OK,
+                    Json(json!({"Result": format!("Update classical info with {:?}", message)})),
+                )
+            }
+            _ => (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"Error": format!("content type {:?} not support", content_type)})),
+            ),
+        },
+        _ => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"Error": format!("content type not specified")})),
+        ),
+    }
+}
+
+pub async fn get_measure(
+    State(state): State<SharedState>,
+    Query(pos): Query<MeasurePos>,
+) -> (StatusCode, Json<Value>) {
+    let state_r = state.read().await;
+    if pos.pos > state_r.results.capacity {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(
+                json!({"Error": format!("Quert position {} is larger than capacity {}", pos.pos, state_r.results.capacity)}),
+            ),
+        )
+    } else {
+        (
+            StatusCode::OK,
+            Json(json!({"Results": state_r.results.results[pos.pos]})),
+        )
+    }
+}
+
 #[tokio::main]
 async fn main() {
     if std::path::Path::new(".env").exists() {
         dotenv::dotenv().ok();
     }
 
+    let measure_path =
+        std::env::var("MEASURE_PATH").unwrap_or_else(|_| "./measure.json".to_string());
+
     let state = Arc::new(RwLock::new(ServerState {
-        results: measure::MeasureResult::default(),
+        measure_path: measure_path.clone(),
+        results: if std::path::Path::new(&measure_path).exists() {
+            MeasureResult::read_file(&measure_path)
+        } else {
+            MeasureResult::default()
+        },
     }));
 
     let listener_addr = std::env::var("LISTENER_ADDR").unwrap_or("0.0.0.0:3003".to_string());
     let qpp_router = Router::new()
         .route("/submit", routing::post(submit))
+        .route("/update", routing::post(update_classical))
+        .route("/get_measure", routing::get(get_measure))
         .with_state(state);
     let listener = tokio::net::TcpListener::bind(listener_addr).await.unwrap();
     axum::serve(listener, qpp_router).await.unwrap();

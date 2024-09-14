@@ -66,7 +66,7 @@ pub struct EmulateInfo {
     pub mode: Option<EmulateMode>,
 }
 
-pub fn post_process_msg_agg(seq: Vec<String>) -> Json<Value> {
+pub fn post_process_msg_agg(seq: Vec<String>, init_pos: usize) -> Json<Value> {
     let mut mem = HashMap::new();
     for s in seq {
         let count = mem.entry(s).or_insert(0);
@@ -74,11 +74,12 @@ pub fn post_process_msg_agg(seq: Vec<String>) -> Json<Value> {
     }
 
     Json(json!({
+        "init_position": init_pos,
         "Result": mem,
     }))
 }
 
-pub fn post_process_msg_minmax(seq: Vec<String>, is_max: bool) -> Json<Value> {
+pub fn post_process_msg_minmax(seq: Vec<String>, is_max: bool, init_pos: usize) -> Json<Value> {
     let mut mem = HashMap::new();
     for s in seq {
         let count = mem.entry(s).or_insert(0);
@@ -88,6 +89,7 @@ pub fn post_process_msg_minmax(seq: Vec<String>, is_max: bool) -> Json<Value> {
     if is_max {
         let max = mem.iter().max_by_key(|&(_, count)| count).unwrap();
         Json(json!({
+            "init_position": init_pos,
             "Result": {
                 max.0: max.1,
             },
@@ -95,6 +97,7 @@ pub fn post_process_msg_minmax(seq: Vec<String>, is_max: bool) -> Json<Value> {
     } else {
         let min = mem.iter().min_by_key(|&(_, count)| count).unwrap();
         Json(json!({
+            "init_position": init_pos,
             "Result": {
                 min.0: min.1,
             },
@@ -103,7 +106,7 @@ pub fn post_process_msg_minmax(seq: Vec<String>, is_max: bool) -> Json<Value> {
 }
 
 /// current for z expectation
-pub fn post_process_msg_expe(seq: Vec<String>) -> Json<Value> {
+pub fn post_process_msg_expe(seq: Vec<String>, init_pos: usize) -> Json<Value> {
     let len = seq.len();
     let mut exp: Vec<f32> = if len != 0 {
         vec![0.0; seq[0].len()]
@@ -124,7 +127,7 @@ pub fn post_process_msg_expe(seq: Vec<String>) -> Json<Value> {
 
     exp = exp.into_iter().map(|x| x / len as f32).collect();
 
-    Json(json!({"Result": [exp]}))
+    Json(json!({"init_position": init_pos, "Result": [exp]}))
 }
 
 pub fn post_process_msg_vqe(seq: Vec<f64>) -> Result<Json<Value>, String> {
@@ -138,18 +141,21 @@ pub async fn post_process_msg(
     mode: String,
 ) -> Result<Json<Value>, String> {
     let mut state_w = state.write().await;
+    let init_pos = state_w.results.current_pos;
     for s in seq.iter() {
         state_w.results.update_results(s);
     }
+    state_w.results.dump_file(&state_w.measure_path);
 
     match mode.as_str() {
         "sequence" => Ok(Json(json!({
+            "init_position": init_pos,
             "Result": [seq],
         }))),
-        "aggregation" => Ok(post_process_msg_agg(seq)),
-        "max" => Ok(post_process_msg_minmax(seq, true)),
-        "min" => Ok(post_process_msg_minmax(seq, false)),
-        "expectation" => Ok(post_process_msg_expe(seq)),
+        "aggregation" => Ok(post_process_msg_agg(seq, init_pos)),
+        "max" => Ok(post_process_msg_minmax(seq, true, init_pos)),
+        "min" => Ok(post_process_msg_minmax(seq, false, init_pos)),
+        "expectation" => Ok(post_process_msg_expe(seq, init_pos)),
         _ => Err("Invalid mode".to_string()),
     }
 }

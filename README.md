@@ -29,6 +29,23 @@ curl -X POST -H "Content-Type: application/json" -d '{
 {"Result":{"00000111":7}}
 ```
 
+Update classical storage info:
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{
+  "qbits": 30,
+  "capacity": 30
+}' http://127.0.0.1:3003/update
+
+{"Result":"Update classical info with ClassicalInfo { qbits: Some(30), capacity: Some(30) }"}
+```
+
+Query measure result:
+```bash
+curl 'http://127.0.0.1:3003/get_measure?pos=1'
+
+{"Results":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1]}
+```
+
 ## Example VQE
   
 ```bash
@@ -41,4 +58,3 @@ curl -X POST -H "Content-Type: application/json" -d '{
   "iterations": 10
 }' http://127.0.0.1:3003/submit
 ```
-
