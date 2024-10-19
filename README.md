@@ -28,6 +28,29 @@ curl -X POST -H "Content-Type: application/json" -d '{
 {"Result":[["00000111","00000011","00000111"]],"init_position":9}
 ```
 
+You can also use emulate client to submit a task:
+```bash
+cargo run -- -m qasm-sim-agent -f examples/bell.qasm -s 10 --task-mode sequence -a 127.0.0.1:3003
+
+{
+  "Result": [
+    [
+      "00",
+      "00",
+      "11",
+      "11",
+      "00",
+      "00",
+      "11",
+      "11",
+      "00",
+      "00"
+    ]
+  ],
+  "init_position": 9
+}
+```
+
 Update classical storage info:
 ```bash
 curl -X POST -H "Content-Type: application/json" -d '{
@@ -38,11 +61,41 @@ curl -X POST -H "Content-Type: application/json" -d '{
 {"Result":"Update classical info with ClassicalInfo { qbits: Some(30), capacity: Some(30) }"}
 ```
 
+You can also use emulate client to update classical storage:
+```bash
+cargo run -- -m update-qasm-sim-agent -q 10 -c 100 -a 127.0.0.1:3003
+
+{
+  "Result": "Update classical info with ClassicalInfo { qbits: Some(10), capacity: Some(100) }"
+}
+```
+
 Query measure result:
 ```bash
 curl 'http://127.0.0.1:3003/get_measure?pos=1'
 
 {"Results":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1]}
+```
+
+You can also use emulate client to query measure result:
+```bash
+cargo run -- -m get-qasm-sim-agent -p 10 -a 127.0.0.1:3003
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/emulate-client -m get-qasm-sim-agent -p 10 -a '127.0.0.1:3003'`
+{
+  "Results": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1
+  ]
+}
 ```
 
 ## Run with docker
