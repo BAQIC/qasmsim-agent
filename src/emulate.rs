@@ -50,6 +50,7 @@ impl fmt::Display for EmulateMode {
 #[derive(Deserialize, Debug, Clone)]
 pub struct EmulateMessage {
     pub qasm: String,
+    pub qubits: usize,
     pub shots: usize,
     pub mode: Option<EmulateMode>,
     // only when the mode is vqe, this field is required
