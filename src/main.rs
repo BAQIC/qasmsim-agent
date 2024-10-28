@@ -6,19 +6,19 @@ use axum::{
     routing, Form, Json, RequestExt, Router,
 };
 use emulate::{EmulateMessage, EmulateMode};
-use measure::MeasureResult;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::sync::{oneshot, RwLock};
 pub mod emulate;
-pub mod measure;
 pub mod optimizer;
+pub mod qubits;
 pub mod thread;
 
 #[derive(Debug, Clone)]
 pub struct ServerState {
     pub measure_path: String,
-    pub results: measure::MeasureResult,
+    pub qmem: qubits::QMemory,
+    pub qreg: qubits::QResgister,
 }
 
 type SharedState = Arc<RwLock<ServerState>>;
@@ -148,14 +148,14 @@ pub async fn update_classical(
                 let mut state_w = state.write().await;
 
                 if message.qbits.is_some() {
-                    state_w.results.update_qbits(message.qbits.unwrap())
+                    state_w.qmem.update_qubits(message.qbits.unwrap())
                 }
 
                 if message.capacity.is_some() {
-                    state_w.results.update_capaicity(message.capacity.unwrap())
+                    state_w.qmem.update_capacity(message.capacity.unwrap())
                 }
 
-                state_w.results.dump_file(&state_w.measure_path);
+                state_w.qmem.dump_file(&state_w.measure_path);
 
                 (
                     StatusCode::OK,
@@ -167,14 +167,14 @@ pub async fn update_classical(
                 let mut state_w = state.write().await;
 
                 if message.qbits.is_some() {
-                    state_w.results.update_qbits(message.qbits.unwrap())
+                    state_w.qmem.update_qubits(message.qbits.unwrap())
                 }
 
                 if message.capacity.is_some() {
-                    state_w.results.update_capaicity(message.capacity.unwrap())
+                    state_w.qmem.update_capacity(message.capacity.unwrap())
                 }
 
-                state_w.results.dump_file(&state_w.measure_path);
+                state_w.qmem.dump_file(&state_w.measure_path);
 
                 (
                     StatusCode::OK,
@@ -198,17 +198,17 @@ pub async fn get_measure(
     Query(pos): Query<MeasurePos>,
 ) -> (StatusCode, Json<Value>) {
     let state_r = state.read().await;
-    if pos.pos > state_r.results.capacity {
+    if pos.pos > state_r.qmem.capacity {
         (
             StatusCode::BAD_REQUEST,
             Json(
-                json!({"Error": format!("Quert position {} is larger than capacity {}", pos.pos, state_r.results.capacity)}),
+                json!({"Error": format!("Quert position {} is larger than capacity {}", pos.pos, state_r.qmem.capacity)}),
             ),
         )
     } else {
         (
             StatusCode::OK,
-            Json(json!({"Results": state_r.results.results[pos.pos]})),
+            Json(json!({"Results": state_r.qmem.mem[pos.pos]})),
         )
     }
 }
@@ -222,13 +222,16 @@ async fn main() {
     let measure_path =
         std::env::var("MEASURE_PATH").unwrap_or_else(|_| "./measure.json".to_string());
 
+    let qmem = if std::path::Path::new(&measure_path).exists() {
+        qubits::QMemory::read_file(&measure_path)
+    } else {
+        qubits::QMemory::default()
+    };
+
     let state = Arc::new(RwLock::new(ServerState {
         measure_path: measure_path.clone(),
-        results: if std::path::Path::new(&measure_path).exists() {
-            MeasureResult::read_file(&measure_path)
-        } else {
-            MeasureResult::default()
-        },
+        qreg: qubits::QResgister::new(qmem.qubits),
+        qmem,
     }));
 
     let listener_addr = std::env::var("LISTENER_ADDR").unwrap_or("0.0.0.0:3003".to_string());
