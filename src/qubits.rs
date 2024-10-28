@@ -1,3 +1,5 @@
+use std::io::{Read, Write};
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -31,13 +33,19 @@ impl QMemory {
     }
 
     pub fn read_file(path: &str) -> Self {
-        let result = std::fs::read_to_string(path).unwrap();
-        serde_json::from_str(result.as_str()).unwrap()
+        let reader: Box<dyn Read> = Box::new(std::fs::File::open(path).unwrap());
+        serde_pickle::from_reader(reader, Default::default()).unwrap()
     }
 
     pub fn dump_file(&self, path: &str) {
-        let result = serde_json::to_string(self).unwrap();
-        std::fs::write(path, result).unwrap();
+        let mut writer: Box<dyn Write> = Box::new(std::fs::File::create(path).unwrap());
+
+        serde_pickle::to_writer(
+            &mut writer,
+            self,
+            serde_pickle::SerOptions::new().proto_v2(),
+        )
+        .unwrap();
     }
 
     /// update the capacity of the result, will make the result to be empty
@@ -92,9 +100,9 @@ impl QResgister {
         }
     }
 
-    pub fn reset_qubits(&mut self) {
-        self.qubits = vec![false; self.qubits.len()];
-        self.idle = self.qubits.len();
+    pub fn update_qubits(&mut self, num_qubits: usize) {
+        self.qubits = vec![false; num_qubits];
+        self.idle = num_qubits;
     }
 
     pub fn update_idle(&mut self, idle: usize) {

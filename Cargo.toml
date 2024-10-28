@@ -24,3 +24,4 @@ num = "0.4.1"
 qasmsim = { git = "https://github.com/BAQIC/qasmsim.git" }
 dotenv = "0.15.0"
 cobyla = "0.6.0"
+serde-pickle = "1.1.1"

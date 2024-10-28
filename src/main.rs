@@ -148,11 +148,12 @@ pub async fn update_classical(
                 let mut state_w = state.write().await;
 
                 if message.qbits.is_some() {
-                    state_w.qmem.update_qubits(message.qbits.unwrap())
+                    state_w.qmem.update_qubits(message.qbits.unwrap());
+                    state_w.qreg.update_qubits(message.qbits.unwrap());
                 }
 
                 if message.capacity.is_some() {
-                    state_w.qmem.update_capacity(message.capacity.unwrap())
+                    state_w.qmem.update_capacity(message.capacity.unwrap());
                 }
 
                 state_w.qmem.dump_file(&state_w.measure_path);
@@ -167,11 +168,12 @@ pub async fn update_classical(
                 let mut state_w = state.write().await;
 
                 if message.qbits.is_some() {
-                    state_w.qmem.update_qubits(message.qbits.unwrap())
+                    state_w.qmem.update_qubits(message.qbits.unwrap());
+                    state_w.qreg.update_qubits(message.qbits.unwrap());
                 }
 
                 if message.capacity.is_some() {
-                    state_w.qmem.update_capacity(message.capacity.unwrap())
+                    state_w.qmem.update_capacity(message.capacity.unwrap());
                 }
 
                 state_w.qmem.dump_file(&state_w.measure_path);
@@ -220,7 +222,7 @@ async fn main() {
     }
 
     let measure_path =
-        std::env::var("MEASURE_PATH").unwrap_or_else(|_| "./measure.json".to_string());
+        std::env::var("MEASURE_PATH").unwrap_or_else(|_| "./measure.pkl".to_string());
 
     let qmem = if std::path::Path::new(&measure_path).exists() {
         qubits::QMemory::read_file(&measure_path)
