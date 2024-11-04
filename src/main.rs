@@ -26,7 +26,7 @@ type SharedState = Arc<RwLock<ServerState>>;
 /// For classical storage initialize and update
 #[derive(Deserialize, Debug, Clone)]
 pub struct ClassicalInfo {
-    pub qbits: Option<usize>,
+    pub qubits: Option<usize>,
     pub capacity: Option<usize>,
 }
 
@@ -147,9 +147,9 @@ pub async fn update_classical(
                 let Form(message): Form<ClassicalInfo> = request.extract().await.unwrap();
                 let mut state_w = state.write().await;
 
-                if message.qbits.is_some() {
-                    state_w.qmem.update_qubits(message.qbits.unwrap());
-                    state_w.qreg.update_qubits(message.qbits.unwrap());
+                if message.qubits.is_some() {
+                    state_w.qmem.update_qubits(message.qubits.unwrap());
+                    state_w.qreg.update_qubits(message.qubits.unwrap());
                 }
 
                 if message.capacity.is_some() {
@@ -167,9 +167,9 @@ pub async fn update_classical(
                 let Json::<ClassicalInfo>(message) = request.extract().await.unwrap();
                 let mut state_w = state.write().await;
 
-                if message.qbits.is_some() {
-                    state_w.qmem.update_qubits(message.qbits.unwrap());
-                    state_w.qreg.update_qubits(message.qbits.unwrap());
+                if message.qubits.is_some() {
+                    state_w.qmem.update_qubits(message.qubits.unwrap());
+                    state_w.qreg.update_qubits(message.qubits.unwrap());
                 }
 
                 if message.capacity.is_some() {

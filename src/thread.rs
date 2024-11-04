@@ -6,7 +6,7 @@ use super::emulate::{
 };
 use axum::{http::StatusCode, Json};
 use serde_json::{json, Value};
-use std::{collections::HashMap, os::linux::raw::stat};
+use std::collections::HashMap;
 use tokio::sync::oneshot;
 
 /// TODO: merge quantum_thread and quantum_thread_vqe
