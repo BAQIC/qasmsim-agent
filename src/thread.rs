@@ -56,12 +56,25 @@ pub async fn classical_thread(
 ) -> (StatusCode, Json<Value>) {
     let mode = msg.mode.clone().unwrap();
 
+    let idle_qubits = state.read().await.qreg.idle;
+    if idle_qubits < 1 || idle_qubits < msg.qubits {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"Error": "No enough qubits"})),
+        );
+    }
+
+    let qubits = msg.qubits;
+
+    state.write().await.qreg.idle -= qubits;
+
     // send the message to the quantum_thread
     msg_tx.send(pre_process_msg(msg)).unwrap();
 
     // use res_rx to receive the result from the quantum_thread
     match res_rx.await {
         Ok(Ok(result)) => {
+            state.write().await.qreg.idle += qubits;
             // post process message
             match post_process_msg(state, result.sequences().clone().unwrap(), mode.to_string())
                 .await
@@ -75,16 +88,22 @@ pub async fn classical_thread(
                 }
             }
         }
-        Ok(Err(err)) => (
-            // quantum thread error
-            StatusCode::BAD_REQUEST,
-            Json(json!({"Error": format!("{}", err)})),
-        ),
-        Err(_) => (
-            // receiver error
-            StatusCode::BAD_REQUEST,
-            Json(json!({"Error": "Internal server error"})),
-        ),
+        Ok(Err(err)) => {
+            state.write().await.qreg.idle += qubits;
+            (
+                // quantum thread error
+                StatusCode::BAD_REQUEST,
+                Json(json!({"Error": format!("{}", err)})),
+            )
+        }
+        Err(_) => {
+            state.write().await.qreg.idle += qubits;
+            (
+                // receiver error
+                StatusCode::BAD_REQUEST,
+                Json(json!({"Error": "Internal server error"})),
+            )
+        }
     }
 }
 

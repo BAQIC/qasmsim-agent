@@ -50,6 +50,7 @@ impl fmt::Display for EmulateMode {
 #[derive(Deserialize, Debug, Clone)]
 pub struct EmulateMessage {
     pub qasm: String,
+    pub qubits: usize,
     pub shots: usize,
     pub mode: Option<EmulateMode>,
     // only when the mode is vqe, this field is required
@@ -141,11 +142,11 @@ pub async fn post_process_msg(
     mode: String,
 ) -> Result<Json<Value>, String> {
     let mut state_w = state.write().await;
-    let init_pos = state_w.results.current_pos;
+    let init_pos = state_w.qmem.current_pos;
     for s in seq.iter() {
-        state_w.results.update_results(s);
+        state_w.qmem.update_results(s);
     }
-    state_w.results.dump_file(&state_w.measure_path);
+    state_w.qmem.dump_file(&state_w.measure_path);
 
     match mode.as_str() {
         "sequence" => Ok(Json(json!({
