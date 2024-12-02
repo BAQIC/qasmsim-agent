@@ -55,8 +55,8 @@ pub struct EmulateMessage {
     pub mode: Option<EmulateMode>,
     // only when the mode is vqe, this field is required
     pub iterations: Option<usize>,
-    pub vars: Option<String>,
-    pub vars_range: Option<String>,
+    pub init_params: Option<String>,
+    pub bounds: Option<String>,
 }
 
 /// For simulator use
@@ -162,18 +162,7 @@ pub async fn post_process_msg(
 }
 
 pub fn pre_process_msg(msg: EmulateMessage) -> EmulateInfo {
-    let vars = serde_json::from_str::<HashMap<String, f32>>(
-        msg.vars.clone().unwrap_or("{}".to_string()).as_str(),
-    )
-    .unwrap();
-
-    let mut qasm_ = msg.qasm.clone();
-
-    if msg.vars.is_some() {
-        for (key, value) in vars.iter() {
-            qasm_ = qasm_.replace(key, &value.to_string());
-        }
-    }
+    let qasm_ = msg.qasm.clone();
 
     EmulateInfo {
         qasm: qasm_,
@@ -188,22 +177,14 @@ pub fn pre_process_msg(msg: EmulateMessage) -> EmulateInfo {
 
 pub fn pre_process_msg_vqe(
     msg: EmulateMessage,
-    vars_range: HashMap<String, (f32, f32)>,
-    iteration: usize,
+    init_params: HashMap<String, f32>,
+    bounds: HashMap<String, (f32, f32)>,
     iterations: usize,
 ) -> EmulateInfo {
-    let mut vars: HashMap<String, f32> = HashMap::new();
-
-    for (key, value) in vars_range {
-        vars.insert(
-            key,
-            value.0 + (value.1 - value.0) * iteration as f32 / (iterations - 1) as f32,
-        );
-    }
-
     let mut qasm_ = msg.qasm.clone();
-    if !vars.is_empty() {
-        for (key, value) in vars.iter() {
+
+    if !init_params.is_empty() {
+        for (key, value) in init_params.iter() {
             qasm_ = qasm_.replace(key, &value.to_string());
         }
     }

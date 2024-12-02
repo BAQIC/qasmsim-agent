@@ -110,15 +110,15 @@ pub async fn classical_thread(
 /// classical thread for VQE
 pub async fn classical_thread_vqe(
     msg: EmulateMessage,
-    vars_range: HashMap<String, (f32, f32)>,
-    iteration: usize,
+    init_params: HashMap<String, f32>,
+    bounds: HashMap<String, (f32, f32)>,
     iterations: usize,
     msg_tx: oneshot::Sender<EmulateInfo>,
     res_rx: oneshot::Receiver<Result<qasmsim::Execution, String>>,
 ) -> (StatusCode, Json<Value>) {
     // send the message to the quantum_thread
     msg_tx
-        .send(pre_process_msg_vqe(msg, vars_range, iteration, iterations))
+        .send(pre_process_msg_vqe(msg, init_params, bounds, iterations))
         .unwrap();
 
     // use res_rx to receive the result from the quantum_thread
