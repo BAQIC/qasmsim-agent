@@ -55,3 +55,21 @@ impl Cobyla {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cobyla() {
+        let cobyla = Cobyla::new(
+            1000,
+            vec![0.0, 0.0],
+            vec![(-10.0, 10.0), (-10.0, 10.0)],
+            1e-6,
+        );
+        let opt_func = |x: &[f64], _: &mut ()| -> f64 { (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2) };
+        let (x_opt, y_opt) = cobyla.optimize(opt_func).unwrap();
+        println!("{:?} {:?}", x_opt, y_opt);
+    }
+}
