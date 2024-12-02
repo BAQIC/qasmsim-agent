@@ -60,10 +60,25 @@ pub async fn consume_task(
                 .unwrap()
         }
         Some(EmulateMode::Vqe) => {
-            let vars_range = match serde_json::from_str::<HashMap<String, (f32, f32)>>(
-                message.vars.clone().unwrap_or("{}".to_string()).as_str(),
+            let init_params = match serde_json::from_str::<HashMap<String, f32>>(
+                message
+                    .init_params
+                    .clone()
+                    .unwrap_or("{}".to_string())
+                    .as_str(),
             ) {
-                Ok(vars_range) => vars_range,
+                Ok(init_params) => init_params,
+                Err(_) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"Error": "Invalid init params"})),
+                    )
+                }
+            };
+            let bounds = match serde_json::from_str::<HashMap<String, (f32, f32)>>(
+                message.bounds.clone().unwrap_or("{}".to_string()).as_str(),
+            ) {
+                Ok(bounds) => bounds,
                 Err(_) => {
                     return (
                         StatusCode::BAD_REQUEST,
@@ -76,34 +91,34 @@ pub async fn consume_task(
             let iterations = message.iterations.unwrap_or(2);
             let mut results = Vec::new();
 
-            for index in 0..iterations {
-                let (msg_tx, msg_rx) = oneshot::channel();
-                let (res_tx, res_rx) = oneshot::channel();
-                tokio::spawn(thread::quantum_thread_vqe(msg_rx, res_tx));
-                match tokio::spawn(thread::classical_thread_vqe(
-                    message.clone(),
-                    vars_range.clone(),
-                    index,
-                    iterations,
-                    msg_tx,
-                    res_rx,
-                ))
-                .await
-                {
-                    Ok((status, json)) => {
-                        if status != StatusCode::OK {
-                            return (status, json);
-                        }
-                        results.push(json);
+            let (msg_tx, msg_rx) = oneshot::channel();
+            let (res_tx, res_rx) = oneshot::channel();
+
+            tokio::spawn(thread::quantum_thread_vqe(msg_rx, res_tx));
+            match tokio::spawn(thread::classical_thread_vqe(
+                message.clone(),
+                init_params.clone(),
+                bounds.clone(),
+                iterations,
+                msg_tx,
+                res_rx,
+            ))
+            .await
+            {
+                Ok((status, json)) => {
+                    if status != StatusCode::OK {
+                        return (status, json);
                     }
-                    Err(err) => {
-                        return (
-                            StatusCode::BAD_REQUEST,
-                            Json(json!({"Error": format!("{}", err)})),
-                        )
-                    }
-                };
-            }
+                    results.push(json);
+                }
+                Err(err) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"Error": format!("{}", err)})),
+                    )
+                }
+            };
+
             (StatusCode::OK, Json(json!({"Result": "Success"})))
         }
         _ => unreachable!(),
